@@ -18,26 +18,17 @@ from tqdm import tqdm
 from dataset.cifar import DATASET_GETTERS
 from utils import AverageMeter, accuracy
 
-# ============================================================
-# Unbiased Teacher를 위한 추가/수정된 함수
-# ============================================================
+logger = logging.getLogger(__name__)
+best_acc = 0
 
 @torch.no_grad()
 def update_teacher_model(student_model, teacher_model, ema_decay):
-    """
-    Student 모델의 가중치를 EMA(Exponential Moving Average)를 사용하여 Teacher 모델에 업데이트합니다.
-    이 함수는 역전파를 사용하지 않고 안정적으로 Teacher를 업데이트하는 Unbiased Teacher의 핵심입니다.
-    """
     student_params = student_model.state_dict()
     teacher_params = teacher_model.state_dict()
     
     for (k_s, v_s), (k_t, v_t) in zip(student_params.items(), teacher_params.items()):
         teacher_params[k_t] = ema_decay * v_t + (1. - ema_decay) * v_s
     teacher_model.load_state_dict(teacher_params)
-
-
-logger = logging.getLogger(__name__)
-best_acc = 0
 
 def save_checkpoint(state, is_best, checkpoint, filename='checkpoint.pth.tar'):
     filepath = os.path.join(checkpoint, filename)
@@ -95,9 +86,6 @@ def main():
     args = parser.parse_args()
     global best_acc
 
-    # ============================================================
-    # 모델 생성 함수
-    # ============================================================
     def create_model(args):
         if args.arch == 'wideresnet':
             import models.wideresnet as models
@@ -116,7 +104,7 @@ def main():
 
     device = torch.device('cuda', args.gpu_id)
     args.device = device
-    args.n_gpu = 1 # Single GPU training
+    args.n_gpu = 1
 
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
@@ -165,27 +153,22 @@ def main():
         sampler=SequentialSampler(test_dataset),
         batch_size=args.batch_size,
         num_workers=args.num_workers)
-
-    # ============================================================
-    # Unbiased Teacher: Student와 Teacher 모델을 별도로 생성
-    # ============================================================
+    
     student_model = create_model(args).to(args.device)
     teacher_model = create_model(args).to(args.device)
     
-    # Teacher 모델의 파라미터를 Student와 동일하게 초기화하고, gradient 계산은 하지 않음
     teacher_model.load_state_dict(student_model.state_dict())
     for param in teacher_model.parameters():
-        param.detach_() # gradient가 흐르지 않도록 함
+        param.detach_()
 
     no_decay = ['bias', 'bn']
     grouped_parameters = [
         {'params': [p for n, p in student_model.named_parameters() if not any(nd in n for nd in no_decay)], 'weight_decay': args.wdecay},
         {'params': [p for n, p in student_model.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
     ]
-    # Optimizer는 Student 모델만 업데이트
+    
     optimizer = optim.SGD(grouped_parameters, lr=args.lr, momentum=0.9, nesterov=args.nesterov)
 
-    #args.epochs = math.ceil(args.total_steps / args.eval_step)
     args.epochs = 100
     scheduler = get_cosine_schedule_with_warmup(optimizer, args.warmup, args.total_steps)
 
@@ -209,7 +192,7 @@ def train(args, labeled_trainloader, unlabeled_trainloader, test_loader,
     unlabeled_iter = iter(unlabeled_trainloader)
 
     student_model.train()
-    teacher_model.train() # Dropout 등을 위해 train 모드로 설정 (하지만 역전파는 안 함)
+    teacher_model.train()
 
     for epoch in range(args.start_epoch, args.epochs):
         losses = AverageMeter()
@@ -236,23 +219,18 @@ def train(args, labeled_trainloader, unlabeled_trainloader, test_loader,
             inputs_x, targets_x = inputs_x.to(args.device), targets_x.to(args.device)
             inputs_u_w, inputs_u_s = inputs_u_w.to(args.device), inputs_u_s.to(args.device)
 
-            # 1. Teacher로 Pseudo-Label 생성 (Weak Augmentation 데이터 사용)
             with torch.no_grad():
                 teacher_logits = teacher_model(inputs_u_w)
                 pseudo_probs = torch.softmax(teacher_logits / args.T, dim=-1)
                 max_probs, pseudo_targets = torch.max(pseudo_probs, dim=-1)
                 mask = (max_probs >= args.threshold).float()
 
-            # 2. Student 학습
-            # Supervised Loss (Labeled Data)
             student_logits_x = student_model(inputs_x)
             loss_s = F.cross_entropy(student_logits_x, targets_x, reduction='mean')
             
-            # Unsupervised Loss (Unlabeled Data with Pseudo-Labels)
             student_logits_u = student_model(inputs_u_s)
             loss_u = (F.cross_entropy(student_logits_u, pseudo_targets, reduction='none') * mask).mean()
 
-            # 3. 최종 손실 및 업데이트
             total_loss = loss_s + args.lambda_u * loss_u
             
             optimizer.zero_grad()
@@ -260,7 +238,6 @@ def train(args, labeled_trainloader, unlabeled_trainloader, test_loader,
             optimizer.step()
             scheduler.step()
             
-            # 4. Teacher 모델 EMA 업데이트
             update_teacher_model(student_model, teacher_model, args.ema_decay)
 
             losses.update(total_loss.item())
@@ -275,7 +252,6 @@ def train(args, labeled_trainloader, unlabeled_trainloader, test_loader,
         if not args.no_progress:
             p_bar.close()
 
-        # 평가는 안정적인 Teacher 모델로 수행
         test_loss, test_acc = test(args, test_loader, teacher_model, epoch)
 
         args.writer.add_scalar('train/1.train_loss', losses.avg, epoch)
@@ -287,8 +263,7 @@ def train(args, labeled_trainloader, unlabeled_trainloader, test_loader,
 
         is_best = test_acc > best_acc
         best_acc = max(test_acc, best_acc)
-
-        # 저장 시 student와 teacher 모델 모두 저장
+        
         model_to_save = student_model.module if hasattr(student_model, "module") else student_model
         teacher_to_save = teacher_model.module if hasattr(teacher_model, "module") else teacher_model
         
