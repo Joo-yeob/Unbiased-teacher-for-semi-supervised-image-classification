@@ -92,8 +92,8 @@ Epoch: 100
 
 | Model | Labeled Data | Top-1 Accuracy (%) | Top-5 Accuracy (%) | Best Top-1 Accuracy (%) | Mean Top-1 Accuracy (%) |
 | :-----: | :----------: | :----------: | :----------------: | :----------------: | :----------------: |
-| Fixmatch(실험 중) | 250 | NaN | NaN | NaN | NaN |
-| Unbiased Teacher(실험 중) | 250 | **NaN** | **NaN** | **NaN** | **NaN** |
+| Fixmatch | 250 | 86.30 | 99.10 | 86.65 | 86.10 |
+| Unbiased Teacher | 250 | **88.07** | **99.49** | **88.07** | **87.72** |
 | Fixmatch | 4000 | 93.83 | 99.82 | 94.00 | 93.76 |
 | Unbiased Teacher | 4000 | **94.37** | **99.86** | **94.37** | **93.91** |
 
@@ -102,10 +102,11 @@ Epoch: 100
 ##  📝 결론
 
 ### Labeled Data의 양에 따른 정확도 비교
-  - Labeled Data가 250개인 경우:
-    
-  - Labeled Data가 4000개인 경우:
-    
-  - Labeled Data가 40개인 경우: 60에폭 정도에서 Pseudo Label로 사용하고 있는 데이터의 비율이 80%가 넘어갔음에도 불구하고, Top-1 Accuracy가 약 40%대에 머물며 효과적인 학습이 진행되지 못했다.(Top-5 Accuracy는 약 88% 정도이었다.) 기존 Fixmatch 논문에서 총 300 에폭의 결과를 비교했기에 300 에폭의 학습이 진행되면 유의미한 결과가 나올 수도 있다고 생각이 들지만, GPU 성능 및 시간의 이유로 인해 실험을 진행하지 못하였다.
-    다만, 라벨 수가 적은 경우, Teacher 모델이 잘못된 Pseudo Label을 만들 가능성이 보다 커지게 된다. 그러면 Student 모델이 잘못 태깅된 라벨로 학습을 하게 되므로, Teacher 모델에게 오염된 파라미터를 제공하게 된다. 이로 인해 Teacher 모델이 점점 더 오염되면서 정확도가 크게 오르지 못하는 현상으로 이어질 수 있다. 추후 더 큰 에폭으로 학습을 진행해서 정확도의 경향을 파악해보는 것이 중요하다고 생각한다.  
+  - Labeled Data가 250개, 4000개인 두 경우 모두, Unbiased Teacher이 Fixmatch보다 Top-1 Accuracy, Top-5 Accuracy, Best Top-1 Accuracy, Mean Top-1 Accuracy 네 가지의 성능 지표에 대해 우위를 보였다. 기존 논문의 경우에는 300 Epoch을 기준으로 비교를 했기 때문에 차이가 있을 수 있지만 Accuracy 그래프를 보았을 때 에폭이 더 진행되더라도 Unbiased Teacher의 성능이 더 높을 것으로 예상된다.
 
+### Top-1 Accuracy (%) vs. Epoch
+<img width="1339" height="412" alt="image" src="https://github.com/user-attachments/assets/f3e34782-d64b-417c-8bdd-c7d91ed9eeed" />
+
+
+  - **생각해볼 부분** : Labeled Data가 40개인 경우: 60에폭 정도에서 Pseudo Label로 사용하고 있는 데이터의 비율이 80%가 넘어갔음에도 불구하고, Top-1 Accuracy가 약 40%대에 머물며 효과적인 학습이 진행되지 못했다.(Top-5 Accuracy는 약 88% 정도이었다.) 기존 Fixmatch 논문에서 총 300 에폭의 결과를 비교했기에 300 에폭의 학습이 진행되면 유의미한 결과가 나올 수도 있다고 생각이 들지만, GPU 성능 및 시간의 이유로 인해 실험을 진행하지 못하였다.
+    다만, 라벨 수가 적은 경우, Teacher 모델이 잘못된 Pseudo Label을 만들 가능성이 보다 커지게 된다. 그러면 Student 모델이 잘못 태깅된 라벨로 학습을 하게 되므로, Teacher 모델에게 오염된 파라미터를 제공하게 된다. 이로 인해 Teacher 모델이 점점 더 오염되면서 정확도가 크게 오르지 못하는 현상으로 이어질 수 있다. 추후 더 큰 에폭으로 학습을 진행해서 정확도의 경향을 파악해보는 것이 중요하다고 생각한다.  
