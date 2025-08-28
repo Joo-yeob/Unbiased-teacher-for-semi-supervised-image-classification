@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite both this repository and the referenced work."
+authors:
+  - family-names: "Han"
+    given-names: "Jooyeob"
+title: "Unbiased Teacher for Semi-Supervised Image Classification"
+version: 1.0.0
+date-released: 2025-08-28
+url: "https://github.com/Joo-yeob/Unbiased-teacher-for-semi-supervised-image-classification"
+
+references:
+  - type: software
+    authors:
+      - family-names: "Kim"
+        given-names: "Jungdae"
+    title: "PyTorch implementation of FixMatch"
+    year: 2020
+    url: "https://github.com/kekmodel/FixMatch-pytorch"
+    collection-title: "GitHub repository"
