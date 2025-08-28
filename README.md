@@ -1,14 +1,14 @@
 # 🎯 Unbiased Teacher for Image Classification
 
-본 프로젝트는 Object Detection을 위해 제안된 Unbiased Teacher 방법론을 이미지 분류(Image Classification) 문제에 적용하여 그 성능을 검증한다.
+본 프로젝트는 Object Detection을 위해 제안된 Unbiased Teacher 방법론을 이미지 분류(Image Classification) 문제에 적용하여 그 성능을 검증하고자 한다.
 
-이를 위해 CIFAR-10 데이터셋에 대한 학습 및 평가 코드를 구현하며, 대표적인 준지도학습 방법론인 FixMatch와의 정확도 비교 실험을 통해 Unbiased Teacher의 효과를 분석한다.
+이를 위해 CIFAR-10 데이터셋에 대한 학습 및 평가 코드를 구현하였고, 대표적인 준지도학습 방법론인 FixMatch와의 정확도 비교 실험을 통해 Unbiased Teacher의 효과를 확인하였다.
 
 ---
 
 ## 💡 모델 동작 방식 상세 설명
 
-이 모델은 Student와 Teacher의  두 개의 네트워크를 통해 준지도학습을 수행한다. 두 네트워크는 동일한 아키텍처(WideResNet-28-2)를 공유하지만, 가중치를 업데이트하는 방식에서 결정적인 차이를 가진다. 하나의 학습 배치는 64개의 라벨 데이터와 448개의 언라벨 데이터(=64×7)로 구성된다. 전체 학습 과정은 아래의 4단계로 반복 진행한다.
+모델은 Student와 Teacher의  두 개의 네트워크를 통해 준지도학습을 수행한다. 두 네트워크는 동일한 아키텍처(WideResNet-28-2)를 공유하지만, 가중치를 업데이트하는 방식에서 결정적인 차이를 가진다. 하나의 학습 배치는 64개의 라벨 데이터와 448개의 언라벨 데이터(=64×7)로 구성된다. 전체 학습 과정은 아래의 4단계로 반복 진행한다.
 
 ### **1️⃣ Teacher 모델을 이용한 의사 레이블 생성**
 
