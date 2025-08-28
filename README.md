@@ -9,7 +9,7 @@
 
 ## 💡 모델 동작 방식 상세 설명
 
-이 모델은 Student와 Teacher의  두 개의 네트워크를 통해 준지도학습을 수행한다. 두 네트워크는 동일한 아키텍처(WideResNet-28-2)를 공유하지만, 가중치를 업데이트하는 방식에서 결정적인 차이를 가진다. 전체 학습 과정은 아래의 4단계로 반복 진행한다.
+이 모델은 Student와 Teacher의  두 개의 네트워크를 통해 준지도학습을 수행한다. 두 네트워크는 동일한 아키텍처(WideResNet-28-2)를 공유하지만, 가중치를 업데이트하는 방식에서 결정적인 차이를 가진다. 하나의 학습 배치는 64개의 라벨 데이터와 448개의 언라벨 데이터(=64×7)로 구성된다. 전체 학습 과정은 아래의 4단계로 반복 진행한다.
 
 ### **1️⃣ Teacher 모델을 이용한 의사 레이블 생성**
 
@@ -19,30 +19,29 @@ Teacher 모델은 레이블이 없는 데이터에 대해 신뢰할 수 있는 *
 2. **예측**: Teacher 모델은 Weak Augmentation이 적용된 이미지를 입력받아 각 클래스에 대한 확률을 예측한다. 
 3. **필터링**: 예측된 확률 값 중 가장 높은 값이 미리 설정된 **임계값(threshold, 기본값 0.95)** 을 넘는 경우에만 해당 예측을 Student 모델에서 활용한다. 이 과정을 통해 부정확한 레이블을 배제하고, 모델이 확신하는 데이터만 학습에 사용할 수 있도록 한다. 
 
-### **2️⃣ 강한 증강 및 Student 학습**
+### **2️⃣ Student 모델 학습**
 
-Student 모델은 Teacher가 만들어준 Pseudo Laebl을 활용하여 강인한(robust) 표현을 학습합니다.
+Student 모델은 Teacher가 만들어준 Pseudo Laebl을 활용하여 학습을 진행한다. 
 
-1.  **입력**: Teacher가 사용했던 **동일한 원본 이미지**에 이번에는 **강한 증강(Strong Augmentation)**을 적용합니다. 강한 증강은 `RandAugment` 기법을 통해 회전, 기울이기, 색상 왜곡 등 매우 심한 변형을 가하고, 이미지 일부를 가리는 `Cutout`을 적용하여 거의 새로운 이미지처럼 만듭니다.
-2.  **지도 학습 (Supervised Loss)**: 레이블이 있는 소량의 데이터에 대해서는 일반적인 지도학습 방식과 동일하게, 모델의 예측과 실제 정답 간의 손실(Cross-Entropy Loss)을 계산합니다.
-3.  **비지도 학습 (Unsupervised Loss)**: 강하게 증강된 레이블 없는 이미지에 대해 Student 모델이 예측을 수행합니다. 이 예측 결과와 **1단계에서 Teacher가 생성한 의사 레이블** 간의 손실을 계산합니다. 이는 Student가 이미지의 형태가 심하게 변형되더라도, 원본이 가진 핵심적인 특징을 파악하여 동일한 정답을 맞히도록 훈련하는 과정입니다.
+1.  **입력**: Teacher가 사용했던 동일한 원본 이미지에 **강한 증강(Strong Augmentation)** 을 적용한다. Strong Augmentation은 회전, 기울이기, 색상 왜곡 등의 14가지 증강 중 2가지가 선택되어 적용되고, 추가적으로 Cutout이 적용된다.
+2.  **Student 모델 학습**: 레이블이 있는 64개의 데이터에 대해서는 일반적인 지도학습 방식과 동일하게, 모델의 예측과 실제 정답 간의 손실(Cross-Entropy Loss)을 계산한다. 강하게 증강된 레이블 없는 이미지에 대해서는 모델의 예측 결과와 **1단계에서 Teacher가 생성한 의사 레이블** 간의 손실을 계산한다. 이는 Student가 이미지의 형태가 심하게 변형되더라도, 원본이 가진 핵심적인 특징을 파악하여 동일한 정답을 맞히도록 훈련하는 과정이다.
 
 ### **3️⃣ 손실 결합 및 Student 업데이트**
 
-Student 모델은 두 종류의 손실을 모두 반영하여 가중치를 업데이트합니다.
+Student 모델은 두 종류의 손실을 모두 반영하여 가중치를 업데이트한다.
 
 -   **최종 손실**: `최종 손실 = 지도 학습 손실 + λ * 비지도 학습 손실`
--   **업데이트**: 계산된 최종 손실을 기반으로 **역전파(Backpropagation)를 수행하여 Student 모델의 가중치만 업데이트**합니다. `λ`는 비지도 학습 손실의 중요도를 조절하는 가중치 파라미터입니다.
+-   **업데이트**: 계산된 최종 손실을 기반으로 **역전파(Backpropagation)를 수행하여 Student 모델의 가중치만 업데이트**한다. `λ`는 비지도 학습 손실의 중요도를 조절하는 가중치 파라미터이다. Teacher 모델은 역전파를 통해 학습되지 않으며, 대신 4단계에서 설명할 EMA를 통해 업데이트 된다. 
 
 ### **4️⃣ EMA를 통한 Teacher 업데이트**
 
-이 프로젝트의 핵심적인 부분으로, **Teacher 모델은 역전파를 통해 학습되지 않습니다.** 대신, 더 똑똑해진 Student 모델의 지식을 부드럽게 이어받습니다.
+Teacher 모델의 가중치를 업데이트하는 방식으로, Student 모델의 가중치를 조금씩 Teacher에 적용한다.
 
--   **EMA (Exponential Moving Average)**: Teacher 모델은 다음과 같은 EMA 공식을 통해 자신의 가중치를 업데이트합니다.
+-   **EMA (Exponential Moving Average)**: Teacher 모델은 다음과 같은 EMA 공식을 통해 자신의 가중치를 업데이트한다.
     `Teacher 가중치 = α * (이전 Teacher 가중치) + (1-α) * (현재 Student 가중치)`
--   `α` (ema_decay, 기본값 0.999)는 매우 높은 값으로 설정되어, Student의 가중치가 아주 조금씩만 Teacher에게 반영됩니다. 이 덕분에 Teacher는 Student의 순간적인 학습 변동에 크게 흔들리지 않고, 시간의 흐름에 따라 축적된 안정적이고 일반화된 지식 체계(앙상블 모델과 유사한 효과)를 갖추게 됩니다.
+-   `α` (ema_decay, 기본값 0.999)는 매우 높은 값으로 설정되어, Student의 가중치가 아주 조금씩만 Teacher에게 반영되도록 하였다. 이는 Teacher 모델이 Student의 순간적인 학습 변동에 흔들리지 않게 하기 위함이다. 즉, 천천히 안정적으로 일반화 지식을 가질 수 있도록 하였다.
 
-이러한 4단계의 순환 과정을 통해, Student는 점차 어려운 문제를 푸는 능력을 기르고 Teacher는 더 안정적인 지식을 제공하는 선순환 구조가 완성됩니다.
+위 실험에서는 총 100 Epoch에 대해 다음 4단계를 반복하였으며, Top-1 Accuracy, Top-5 Accuracy, Best Top-1 Accuracy, Mean Top-1 Accuracy의 평가지표를 사용하였다. 또한, Fixmatch와의 성능 비교를 통해 Unbiased Teacher의 효과를 확인하였다. 
 
 ---
 
@@ -56,10 +55,23 @@ Student 모델은 두 종류의 손실을 모두 반영하여 가중치를 업�
 
 아래 스크립트를 실행하여 모델을 학습시켰다. 주요 하이퍼파라미터를 인자로 전달하여 실험 조건을 변경할 수 있다.
 
--   **CIFAR-10, 레이블 4000개, WideResNet 사용 예시**
+-   **CIFAR-10, 레이블 4000개, WideResNet, Unbiased_Teacher 사용 예시**
 
     ```bash
     !python train_UT.py \
+        --dataset cifar10 \
+        --num-labeled 4000 \
+        --arch wideresnet \
+        --batch-size 64 \
+        --lr 0.03 \
+        --expand-labels \
+        --seed 5 \
+        --out results/cifar10@4000.5
+    ```
+
+-   **CIFAR-10, 레이블 4000개, WideResNet, Fixmatch 사용 예시**
+    ```bash
+    !python train.py \
         --dataset cifar10 \
         --num-labeled 4000 \
         --arch wideresnet \
@@ -80,8 +92,8 @@ Epoch: 100
 
 | Model | Labeled Data | Top-1 Accuracy (%) | Top-5 Accuracy (%) | Best Top-1 Accuracy (%) | Mean Top-1 Accuracy (%) |
 | :-----: | :----------: | :----------: | :----------------: | :----------------: | :----------------: |
-| Fixmatch(X) | 250 | **94.37** | **99.86** | **94.37** | **93.91** |
-| Unbiased Teacher(X) | 250 | **94.37** | **99.86** | **94.37** | **93.91** |
+| Fixmatch(실험 중) | 250 | NaN | NaN | NaN | NaN |
+| Unbiased Teacher(실험 중) | 250 | **NaN** | **NaN** | **NaN** | **NaN** |
 | Fixmatch | 4000 | 93.83 | 99.82 | 94.00 | 93.76 |
 | Unbiased Teacher | 4000 | **94.37** | **99.86** | **94.37** | **93.91** |
 
@@ -89,5 +101,11 @@ Epoch: 100
 
 ##  📝 결론
 
-1. Labeled Data의 양에 따른 정확도 비교
-   Labeled Data가 40개인 경우에는 60 에폭에서 이미 Pseudo Label 비율이 80%까지 상승했음에도 불구하고 Top-1 Accuracy가 약 40% 대에 머물며 효과적인 학습이 진행되지 못했다. Fixmatch 기법과 다르게 Unbiased Teacher은 
+### Labeled Data의 양에 따른 정확도 비교
+  - Labeled Data가 250개인 경우:
+    
+  - Labeled Data가 4000개인 경우:
+    
+  - Labeled Data가 40개인 경우: 60에폭 정도에서 Pseudo Label로 사용하고 있는 데이터의 비율이 80%가 넘어갔음에도 불구하고, Top-1 Accuracy가 약 40%대에 머물며 효과적인 학습이 진행되지 못했다.(Top-5 Accuracy는 약 88% 정도이었다.) 기존 Fixmatch 논문에서 총 300 에폭의 결과를 비교했기에 300 에폭의 학습이 진행되면 유의미한 결과가 나올 수도 있다고 생각이 들지만, GPU 성능 및 시간의 이유로 인해 실험을 진행하지 못하였다.
+    다만, 라벨 수가 적은 경우, Teacher 모델이 잘못된 Pseudo Label을 만들 가능성이 보다 커지게 된다. 그러면 Student 모델이 잘못 태깅된 라벨로 학습을 하게 되므로, Teacher 모델에게 오염된 파라미터를 제공하게 된다. 이로 인해 Teacher 모델이 점점 더 오염되면서 정확도가 크게 오르지 못하는 현상으로 이어질 수 있다. 추후 더 큰 에폭으로 학습을 진행해서 정확도의 경향을 파악해보는 것이 중요하다고 생각한다.  
+
